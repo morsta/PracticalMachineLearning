@@ -8,3 +8,5 @@ The result is a model with 98.5% accuracy based on only 11 predictors.
 The data can be obtained from here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
 
 Make sure the data is in your working directory, if you like to run the code on your own.
+
+Go to html: https://morsta.github.io/PracticalMachineLearning/
