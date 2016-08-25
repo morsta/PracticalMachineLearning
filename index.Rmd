@@ -1,0 +1,94 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Morris Sta"
+date: "25 August 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load the data and get a first idea of it
+First, read in the training data and split it into training and testing sets. Also set seed for reproducibility.
+
+```{r}
+library(caret)
+set.seed(76)
+dataActivity <- read.csv("pml-training.csv")
+trainIndex <- createDataPartition(dataActivity$classe, p=0.8, list=FALSE)
+training <- dataActivity[trainIndex,]
+testing <- dataActivity[-trainIndex,]
+#head(training) suppressed for layout reasons
+#summary(training)
+class(training$classe)
+```
+##Identify useless variables
+
+There are variables with many observations (more than 20 percent) being "NA", which isn't really helpfull for building a prediction model. Because they are irrelevant I don't want to use first 7 columns either.
+
+```{r}
+
+n <- length(training[1,])
+obs <- length(training[,1])
+varnames <- colnames(training[1,])
+nas <- 0
+omitInd <- 1:7 
+for(i in 1:n){
+  nas <- sum(is.na(training[,i]))
+  if(nas>obs*0.2 && varnames[i]!="classes") omitInd <- cbind(omitInd, i)
+}
+training <- training[, -omitInd] 
+testing <- testing[,-omitInd]
+```
+
+There are variables with very low variability. I use the nearZeroVar()-function (caret-package) to find them and throw out another 58 variables.
+
+````{r}
+set.seed(123)
+nsv <- nearZeroVar(training)
+training <- training[,-nsv]
+testing <- testing[,-nsv]
+````
+
+##Find the most important variables
+(idea from machinelearningmastery.com)
+We still have 52 possible predictors left. Considering scalability, we want to reduce the predictors.
+Therefore I create a small subset and build a model to determine the most important variables. The method of choice is Random Forest ("rf") as it is one of the top performing algorithms. Moreover repeated 3-fold-cross-validation is used for a better result.
+
+```{r}
+set.seed(987)
+trainSubInd <- createDataPartition(training$classe, p=0.1, list=FALSE)
+trainSub <- training[trainSubInd,]
+controlSub <- trainControl(method="repeatedcv", number=3, repeats=2)
+modSub <- train(classe~., method="rf", trControl = controlSub, data=trainSub)
+importance <- varImp(modSub)
+plot(importance, main= "Top 20 Importance", top=20)
+```
+
+##Train the model
+
+We now have an idea of which variables are the best predictors and can build a model based on the top 11 variables (in this case equivalent to 20% quantile as 52*0.2 = 10.4). Again, cross-validation is used.
+
+```{r}
+set.seed(111)
+trainData <- training[-trainSubInd,]
+topVar <- quantile(importance$importance[,1], 0.8)
+select <- c(importance$importance[,1]>topVar, TRUE)
+trainData <- trainData[,select]
+control <- trainControl(method="cv", number=5)
+model <- train(classe~., method="rf", trControl = control, data=trainData )
+```
+
+##Evaluate the model
+
+```{r}
+pred <- predict(model, testing)
+confMat <- confusionMatrix(pred, testing$classe)
+confMat$overall
+confMat$table
+testing$predRight <- pred==testing$classe
+qplot(roll_belt, pitch_forearm, color = predRight, data = testing)
+```
+
+We get an accuracy of about 98.5%, which makes an out-of-sample-error of about 1.5%.
